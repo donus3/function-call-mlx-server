@@ -131,6 +131,30 @@ def transform_to_json_if_xml_like(input_string):
     json_output = json.dumps(data_dict)
     return json_output
 
+def parse_json_strings(obj):
+    """
+    Recursively parses JSON strings into Python objects (dict/list).
+    If a key is 'id', ensure the value is always a string.
+    """
+    if isinstance(obj, str):
+        try:
+            parsed = json.loads(obj)
+            return parse_json_strings(parsed)
+        except json.JSONDecodeError:
+            return obj
+    elif isinstance(obj, list):
+        return [parse_json_strings(item) for item in obj]
+    elif isinstance(obj, dict):
+        new_dict = {}
+        for k, v in obj.items():
+            parsed_val = parse_json_strings(v)
+            if k == "id":
+                parsed_val = str(parsed_val)
+            new_dict[k] = parsed_val
+        return new_dict
+    else:
+        return obj
+
 
 def preprocess_message(message):
     """
@@ -156,21 +180,11 @@ def preprocess_message(message):
 
             # Check if the function and its arguments exist
             if function_data and "arguments" in function_data:
-                arguments = function_data["arguments"]
-
-                # Check if the arguments are a string
-                if isinstance(arguments, str):
-                    try:
-                        # Attempt to parse the JSON string
-                        parsed_args = json.loads(arguments)
-                        # Replace the string with the parsed dictionary
-                        function_data["arguments"] = parsed_args
-                        print(f"Successfully transformed arguments for function '{
-                              function_data.get('name')}'.")
-                    except json.JSONDecodeError:
-                        # If parsing fails, leave it as is and print a warning
-                        print(f"Warning: Could not parse arguments string as JSON: {
-                              arguments}")
+                try:
+                    function_data["arguments"] = parse_json_strings(function_data["arguments"])
+                    print(f"Successfully transformed arguments for function '{function_data.get('name')}'.")
+                except json.JSONDecodeError:
+                    print(f"Warning: Could not parse arguments string as JSON: {function_data}")
 
     return message
 
@@ -559,7 +573,7 @@ class APIHandler(BaseHTTPRequestHandler):
                 "type": "function",
                 "function": {
                     "name": function_name,
-                    "arguments": json.dumps(arguments_dict, indent=2)
+                    "arguments": json.dumps(parse_json_strings(arguments_dict), indent=2)
                 },
             }
 
