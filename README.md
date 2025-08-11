@@ -1,6 +1,6 @@
-# POC MLX Server with Qwen3-coder and open ai function call supported
+# Fucntion Calling MLX Server
 
-A lightweight HTTP server for running Qwen3-coder language models with MLX (Metal for Mac) acceleration. This server provides an OpenAI-compatible API interface for serving Qwen3-coder models locally.
+A lightweight HTTP server for running Qwen and GPT_OSS language models with MLX (Metal for Mac) acceleration. This server provides an OpenAI-compatible API interface for serving Qwen and OSS models locally.
 
 ## Features
 
@@ -16,22 +16,22 @@ A lightweight HTTP server for running Qwen3-coder language models with MLX (Meta
 
 ```bash
 # Install the package
-uv pip install -e .
+uv sync
 ```
 
 ## Usage
 
-Start the server with a Qwen3-coder model:
+Start the server with a Qwen model:
 
 ```bash
 # Basic usage
-uv run main.py --model <path-to-qwen-model>
+uv run main.py --type qwen --model <path-to-qwen-model>
 
 # With custom host and port
-uv run main.py --host 0.0.0.0 --port 8080 --model <path-to-qwen-model>
+uv run main.py --type qwen --host 0.0.0.0 --port 8080 --model <path-to-qwen-model>
 
 # With draft model for speculative decoding
-uv run main.py --model <path-to-qwen-model> --draft-model <path-to-draft-model>
+uv run main.py --type qwen --model <path-to-qwen-model> --draft-model <path-to-draft-model>
 ```
 
 ## API Endpoints
