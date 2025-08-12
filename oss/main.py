@@ -155,18 +155,21 @@ def main(argv=None):
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
 
-    threading.Thread(target=run, args=(args.host, args.port,
-                     ModelProvider(args)), daemon=True).start()
-    event_handler = ChangeHandler()
-    observer = Observer()
-    observer.schedule(event_handler, ".", recursive=True)
-    observer.start()
-    try:
-        while True:
-            pass
-    except KeyboardInterrupt:
-        observer.stop()
-    observer.join()
+    if args.log_level == "DEBUG":
+        threading.Thread(target=run, args=(args.host, args.port,
+                         ModelProvider(args)), daemon=True).start()
+        event_handler = ChangeHandler()
+        observer = Observer()
+        observer.schedule(event_handler, ".", recursive=True)
+        observer.start()
+        try:
+            while True:
+                pass
+        except KeyboardInterrupt:
+            observer.stop()
+        observer.join()
+    else:
+        run(args.host, args.port, ModelProvider(args))
 
 
 if __name__ == "__main__":

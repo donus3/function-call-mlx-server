@@ -494,6 +494,7 @@ class APIHandler(BaseHTTPRequestHandler):
         prompt = self.get_prompt_cache(prompt)
 
         text = ""
+        stop_token_ids = encoding.stop_tokens_for_assistant_actions()
         tic = time.perf_counter()
         sampler = make_sampler(
             self.temperature,
@@ -503,10 +504,11 @@ class APIHandler(BaseHTTPRequestHandler):
             xtc_probability=self.xtc_probability,
             xtc_threshold=self.xtc_threshold,
             xtc_special_tokens=[
-                self.tokenizer.eos_token_id,
+                *stop_token_ids,
                 self.tokenizer.encode("\n"),
             ],
         )
+
         logits_processors = make_logits_processors(
             self.logit_bias,
             self.repetition_penalty,
@@ -534,7 +536,6 @@ class APIHandler(BaseHTTPRequestHandler):
                 stream.process(gen_response.token)
                 tokens.append(gen_response.token)
 
-                print(f"xxxxxx stream {stream.current_role} {stream.last_content_delta} {stream.current_channel} {stream.current_content_type} {stream.current_recipient}")
                 if (
                     self.tokenizer.has_tool_calling
                     and stream.current_recipient
@@ -572,7 +573,7 @@ class APIHandler(BaseHTTPRequestHandler):
 
                 token_logprobs.append(logprobs[token].item())
 
-                if gen_response.token == 200002:
+                if gen_response.token in stop_token_ids:
                     finish_reason = "stop"
                     break
 
@@ -597,8 +598,10 @@ class APIHandler(BaseHTTPRequestHandler):
                     finish_reason = "stop"
                     break
 
-            except Exception as e:
-                print(f"error: {e}" )
+            except ValueError as e:
+                print(f"Stream error: {e}" )
+                break
+
 
         self.prompt_cache.tokens.extend(stream.tokens)
 
