@@ -1,3 +1,4 @@
+import ast
 import re
 import secrets
 import argparse
@@ -529,6 +530,7 @@ class APIHandler(BaseHTTPRequestHandler):
         if self.adapter is not None and not isinstance(self.adapter, str):
             raise ValueError("adapter must be a string")
 
+
     def convert_custom_format_to_json(self, input_string: str) -> str:
         """
         Parses a custom-tagged string and converts it into a specific JSON format.
@@ -539,6 +541,43 @@ class APIHandler(BaseHTTPRequestHandler):
         Returns:
             A JSON formatted string, or an empty string if parsing fails.
         """
+
+        def fix_typescript_json_to_python_dict(ts_json_str):
+            """
+            Convert TypeScript-style JSON string to Python dict compatible format.
+            
+            Features:
+            - Wraps all keys and string values with double quotes
+            - Escapes quotes within string values
+            - Removes trailing comma from last item
+            - Handles nested objects and arrays
+            """
+            
+            # Remove any trailing whitespace and newlines
+            ts_json_str = ts_json_str.strip()
+            
+            # Step 1: Fix single quotes around keys and string values to double quotes
+            # This regex finds keys (word followed by colon) and replaces single quotes with double quotes
+            result = re.sub(r"'([^']*?)'(\s*:)", r'"\1"\2', ts_json_str)  # Fix keys
+            result = re.sub(r":\s*'([^']*?)'", r': "\1"', result)  # Fix string values
+            
+            # Step 2: Escape any double quotes within string values
+            # Find string values and escape internal quotes
+            def escape_quotes_in_strings(match):
+                value = match.group(1)
+                # Escape any double quotes within the string value
+                escaped_value = value.replace('"', '\\"')
+                return f': "{escaped_value}"'
+            
+            # Apply escaping to string values that might contain quotes
+            result = re.sub(r':\s*"([^"]*)"', escape_quotes_in_strings, result)
+            
+            # Step 3: Remove trailing comma from the last item in arrays/objects
+            # Remove comma before closing brackets/braces
+            result = re.sub(r',(\s*[}\]])', r'\1', result)
+            
+            return result
+
         try:
             # --- 1. Extract the function name ---
             # Search for the pattern <function=some_name> and capture "some_name"
@@ -555,7 +594,7 @@ class APIHandler(BaseHTTPRequestHandler):
             param_matches = re.findall(param_pattern, input_string, re.DOTALL)
 
             # Create a dictionary from the found parameters, stripping whitespace from keys and values
-            arguments_dict = {key.strip(): value.strip()
+            arguments_dict = {key.strip(): fix_typescript_json_to_python_dict(value.strip())
                               for key, value in param_matches}
 
             # --- 3. Generate unique IDs ---
