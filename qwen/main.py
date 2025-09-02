@@ -16,7 +16,6 @@ from typing import (
     Literal,
     NamedTuple,
     Sequence,
-    Tuple,
 )
 
 import mlx.core as mx
@@ -27,6 +26,7 @@ from mlx_lm.models.cache import can_trim_prompt_cache, make_prompt_cache, trim_p
 from mlx_lm.sample_utils import make_logits_processors, make_sampler
 from mlx_lm.utils import common_prefix_len, load
 
+from qwen.json_schema_self_healing import heal_from_schema
 
 class StopCondition(NamedTuple):
     stop_met: bool
@@ -141,7 +141,7 @@ def parse_json_strings(obj):
             return obj
     elif isinstance(obj, list):
         return [parse_json_strings(item) for item in obj]
-    elif isinstance(obj, dict):
+    if isinstance(obj, dict):
         new_dict = {}
         for k, v in obj.items():
             parsed_val = parse_json_strings(v)
@@ -153,7 +153,7 @@ def parse_json_strings(obj):
         return obj
 
 
-def preprocess_message(message):
+def preprocess_message(message, functions):
     """
     Iterates through a list of message dictionaries.
     If a message contains tool_calls with a string in the 'arguments' field,
@@ -161,6 +161,7 @@ def preprocess_message(message):
 
     Args:
         message (dict): A message dictionaries.
+        functions (list<dict>): A list of json schema of the function calls.
 
     Returns:
         dict: The message with arguments transformed.
@@ -178,7 +179,11 @@ def preprocess_message(message):
             # Check if the function and its arguments exist
             if function_data and "arguments" in function_data:
                 try:
-                    function_data["arguments"] = parse_json_strings(function_data["arguments"])
+                    schema = next((fn for fn in functions if fn.get("function") == function_data.get("name")), None)
+                    if schema:
+                        function_data["arguments"] = heal_from_schema(parse_json_strings(function_data.get("arguments")), schema)
+                    else:
+                        function_data["arguments"] = parse_json_strings(function_data.get("arguments"))
                     print(f"Successfully transformed arguments for function '{function_data.get('name')}'.")
                 except json.JSONDecodeError:
                     print(f"Warning: Could not parse arguments string as JSON: {function_data}")
@@ -186,7 +191,7 @@ def preprocess_message(message):
     return message
 
 
-def process_message_content(messages):
+def process_message_content(messages: list[dict[str, any]], functions: list[dict]):
     """
     Convert message content to a format suitable for `apply_chat_template`.
 
@@ -194,16 +199,17 @@ def process_message_content(messages):
     to a string instead of a list of text fragments.
 
     Args:
-        message_list (list): A list of dictionaries, where each dictionary may
+        message (list): A list of dictionaries, where each dictionary may
           have a 'content' key containing a list of dictionaries with 'type' and
           'text' keys.
+        functions (list[dict]): A list of json schema of the function calls.
 
     Raises:
         ValueError: If the 'content' type is not supported or if 'text' is missing.
 
     """
     for message in messages:
-        message = preprocess_message(message)
+        message = preprocess_message(message, functions)
         message["content"] = transform_to_json_if_xml_like(message["content"])
         content = message["content"]
         if isinstance(content, list):
@@ -369,6 +375,21 @@ class APIHandler(BaseHTTPRequestHandler):
         raw_body = self.rfile.read(content_length)
         try:
             self.body = json.loads(raw_body.decode())
+            tools = self.body.get("tools") or None
+            if tools != None:
+                functions = list(map(lambda each: { 
+                    "function": each["function"]['name'],
+                    "params": each['function']['parameters'] 
+                }, tools))
+                remove_desc_lambda = lambda data: (
+                    dict(map(lambda x: (x[0], remove_desc_lambda(x[1])), 
+                            filter(lambda x: x[0] != 'description', data.items())))
+                    if isinstance(data, dict) else
+                    list(map(remove_desc_lambda, data))
+                    if isinstance(data, list) else
+                    data
+                )
+                self.functions = remove_desc_lambda(functions)
         except json.JSONDecodeError as e:
             logging.error(f"JSONDecodeError: {
                           e} - Raw body: {raw_body.decode()}")
@@ -1011,7 +1032,7 @@ class APIHandler(BaseHTTPRequestHandler):
         self.object_type = "chat.completion.chunk" if self.stream else "chat.completion"
         if self.tokenizer.chat_template:
             messages = body["messages"]
-            process_message_content(messages)
+            process_message_content(messages, self.functions)
             prompt = self.tokenizer.apply_chat_template(
                 messages,
                 body.get("tools") or None,
