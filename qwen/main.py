@@ -238,6 +238,7 @@ class ModelProvider:
         self.model = None
         self.tokenizer = None
         self.draft_model = None
+        self.functions = None
 
         # Preload the default model if it is provided
         if self.cli_args.model is not None:
