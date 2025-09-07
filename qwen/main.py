@@ -238,7 +238,6 @@ class ModelProvider:
         self.model = None
         self.tokenizer = None
         self.draft_model = None
-        self.functions = None
 
         # Preload the default model if it is provided
         if self.cli_args.model is not None:
@@ -333,6 +332,7 @@ class APIHandler(BaseHTTPRequestHandler):
         self.created = int(time.time())
         self.model_provider = model_provider
         self.prompt_cache = prompt_cache or PromptCache()
+        self.functions = None
         super().__init__(*args, **kwargs)
 
     def _set_cors_headers(self):
